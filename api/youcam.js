@@ -140,7 +140,7 @@ module.exports = async function handler(req, res) {
         body: JSON.stringify({
           src_file_id: srcFileId,
           ref_file_id: refFileId,
-          garment_category: 'auto'
+          garment_category: 'full_body'
         })
       });
       return json(res, 200, { ok: true, data });
