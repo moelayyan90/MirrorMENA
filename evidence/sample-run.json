@@ -1,0 +1,7 @@
+{
+  "evidenceType": "deterministic-demo",
+  "claim": "This is sample output, not a claim of real revenue or users.",
+  "input": {"goal":"Earn the first $500 remotely without upfront capital","capital":0,"hoursPerWeek":10},
+  "safety": ["no deception","no KYC evasion","no unauthorized security testing","no binding bid without funds/approval"],
+  "expectedOutput": "Ranked opportunity portfolio with payout, probability, expected value, speed and risk."
+}

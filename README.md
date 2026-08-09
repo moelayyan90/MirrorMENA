@@ -1,45 +1,32 @@
-# MirrorMENA
+# OpportunityOS — Your AI Opportunity Operating System
 
-AI-powered MENA beauty and fashion experience using the **YouCam API**.
+**Tagline:** Turn ambition into an executable plan.
 
-MirrorMENA combines two retail-oriented AI experiences in one bilingual web demo:
+OpportunityOS is an AI-native opportunity intelligence and execution system built for the Build with Gemini XPRIZE. It turns goals, constraints and candidate evidence into a ranked portfolio of lawful opportunities using expected realized value rather than vanity revenue.
 
-- **Skin Intelligence** — YouCam Skin Analysis v2.1 for HD wrinkle, pore, texture and acne analysis.
-- **Virtual Style** — YouCam AI Clothes v3 for reference-image virtual try-on.
+## What it does
 
-## Security architecture
+1. Captures goal, geography, available capital, time and constraints.
+2. Rejects candidates with unclear payout, hidden capital, weak economics, excessive competition, legal/policy ambiguity or unsafe execution.
+3. Ranks surviving opportunities using payout, payout probability, cash-conversion speed, effort, capital and risk.
+4. Uses Gemini to explain and prioritize the evidence when `GEMINI_API_KEY` is configured.
+5. Can write privacy-safe run metadata to Google Cloud Firestore when Google Application Default Credentials and `GOOGLE_CLOUD_PROJECT` (or `FIREBASE_PROJECT_ID`) are configured.
+6. Keeps a transparent deterministic demo when live credentials are absent; it never pretends sample data is live AI output.
 
-The YouCam API key is **never shipped to the browser**. Browser uploads use short-lived pre-signed upload URLs obtained through the serverless API route. The server route reads the key only from the `YOUCAM_API_KEY` environment variable.
+## Google / Gemini architecture
 
-## Official YouCam endpoints used
+- **Gemini API:** server-side `models.generateContent` call from `api/analyze.js`; default model is `gemini-3.5-flash` and can be changed through `GEMINI_MODEL`.
+- **Google Cloud Firestore:** optional production run ledger in collection `opportunityos_runs`.
+- A Firebase project named `OpportunityOS-XPRIZE` has been prepared for the competition environment; production Firebase AI Logic/App Check configuration should be connected before public client-side Gemini access is enabled.
 
-### Skin Analysis v2.1
-- `POST /s2s/v2.1/file/skin-analysis`
-- `POST /s2s/v2.1/task/skin-analysis`
-- `GET /s2s/v2.1/task/skin-analysis/{task_id}`
+## Safety boundary
 
-### AI Clothes v3
-- `POST /s2s/v2.0/file/cloth-v3`
-- `POST /s2s/v2.0/task/cloth-v3`
-- `GET /s2s/v2.0/task/cloth-v3/{task_id}`
+OpportunityOS rejects deception, fake identity/credentials, KYC or geographic evasion, prohibited automation, unauthorized security testing, bid suppression/collusion and gambling-like schemes. Payments, contracts, identity, tax declarations and irreversible financial/legal commitments remain human-controlled.
 
-## Deploy on Vercel
+## Run
 
-1. Import this repository into Vercel.
-2. Add an environment variable named `YOUCAM_API_KEY` in Project Settings → Environment Variables.
-3. Paste the active YouCam API key as the value. Do not prefix it with `Bearer`.
-4. Deploy.
+This repository branch is designed for Vercel-compatible static + serverless deployment. The front end works as a transparent demo without credentials. To enable live Gemini analysis, set `GEMINI_API_KEY`. To enable Firestore logging, configure Google Cloud credentials plus `GOOGLE_CLOUD_PROJECT` or `FIREBASE_PROJECT_ID`.
 
-No paid service is required for the hackathon demo when kept within available free allowances.
+## Evidence policy
 
-## Local development
-
-Install the Vercel CLI, create `.env.local` from `.env.example`, add your key locally, then run `vercel dev`.
-
-## Privacy and medical disclaimer
-
-This project is a hackathon demonstration. Skin Analysis output is not medical diagnosis or medical advice. User images are sent to YouCam's upload and processing infrastructure only when the user explicitly starts an analysis or virtual try-on.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+No user, revenue, expense, conversion or production-usage metric is invented. `evidence/sample-run.json` is explicitly marked as sample output. Real XPRIZE evidence should only be added after an arm's-length user or customer actually uses or pays for the product.
