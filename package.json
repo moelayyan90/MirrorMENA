@@ -1,0 +1,10 @@
+{
+  "name": "mirrormena",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-powered MENA beauty and fashion experience using YouCam API",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "engines": { "node": ">=18" }
+}
