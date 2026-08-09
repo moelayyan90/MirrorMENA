@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#f6efe8" />
+  <meta name="description" content="MirrorMENA — AI-powered skin intelligence and virtual fashion try-on built with YouCam API." />
+  <title>MirrorMENA — AI Beauty & Fashion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Kufi+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="nav shell">
+    <a class="brand" href="#top" aria-label="MirrorMENA home"><span class="brand-mark">M</span><span>MirrorMENA</span></a>
+    <div class="nav-actions">
+      <button class="ghost small" id="langBtn" type="button" aria-label="Switch language">العربية</button>
+      <a class="pill small" href="#experience" data-i18n="tryNow">Try now</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero shell">
+      <div class="hero-copy">
+        <div class="eyebrow" data-i18n="eyebrow">AI beauty & fashion for MENA</div>
+        <h1 data-i18n="headline">One mirror.<br><em>Two intelligent experiences.</em></h1>
+        <p class="lead" data-i18n="lead">Understand your skin in detail, then explore a new look — powered by YouCam AI and designed for a seamless retail journey.</p>
+        <a class="cta" href="#experience"><span data-i18n="start">Start your mirror</span><span aria-hidden="true">↗</span></a>
+        <p class="privacy" data-i18n="privacy">Your API key never reaches the browser. Images are sent only through secure, temporary upload URLs.</p>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="orb orb-a"></div><div class="orb orb-b"></div>
+        <div class="mirror-card"><div class="face-line"></div><span>SKIN</span><strong>+</strong><span>STYLE</span></div>
+      </div>
+    </section>
+
+    <section class="experience shell" id="experience">
+      <div class="section-head">
+        <div><span class="eyebrow" data-i18n="experience">THE MIRROR EXPERIENCE</span><h2 data-i18n="choose">Choose what you want to discover.</h2></div>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="skin" type="button" data-i18n="skinTab">Skin Intelligence</button>
+          <button class="tab" data-tab="cloth" type="button" data-i18n="styleTab">Virtual Style</button>
+        </div>
+      </div>
+
+      <section class="panel active" id="panel-skin" aria-label="Skin Intelligence">
+        <div class="panel-copy">
+          <span class="number">01</span>
+          <h3 data-i18n="skinTitle">See what your skin is saying.</h3>
+          <p data-i18n="skinText">Upload a clear front-facing selfie. MirrorMENA analyzes wrinkles, pores, texture and acne using YouCam Skin Analysis v2.1.</p>
+          <ul><li data-i18n="skinTip1">Face centered and looking straight ahead</li><li data-i18n="skinTip2">Bright, even lighting</li><li data-i18n="skinTip3">No filters or heavy occlusion</li></ul>
+        </div>
+        <div class="work-card">
+          <label class="dropzone" for="skinFile" id="skinDrop">
+            <input id="skinFile" type="file" accept="image/jpeg,image/png" hidden>
+            <span class="upload-icon">＋</span>
+            <strong data-i18n="uploadSelfie">Upload a selfie</strong>
+            <span data-i18n="jpgHint">JPG or PNG · under 10 MB</span>
+            <img id="skinPreview" alt="Selfie preview" hidden>
+          </label>
+          <button class="primary" id="skinRun" type="button" disabled><span data-i18n="analyze">Analyze my skin</span><span>→</span></button>
+          <div class="status" id="skinStatus" hidden></div>
+          <div class="result" id="skinResult" hidden></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-cloth" aria-label="Virtual Style">
+        <div class="panel-copy">
+          <span class="number">02</span>
+          <h3 data-i18n="clothTitle">Try the look before you wear it.</h3>
+          <p data-i18n="clothText">Upload your photo and a garment reference. YouCam AI Clothes v3 generates a realistic virtual try-on while preserving your identity.</p>
+          <ul><li data-i18n="clothTip1">Use a clear, front-facing person photo</li><li data-i18n="clothTip2">Use one garment or one outfit reference</li><li data-i18n="clothTip3">For best results, keep the body unobstructed</li></ul>
+        </div>
+        <div class="work-card">
+          <div class="dual-upload">
+            <label class="dropzone compact" for="personFile"><input id="personFile" type="file" accept="image/jpeg,image/png" hidden><span class="upload-icon">＋</span><strong data-i18n="yourPhoto">Your photo</strong><span data-i18n="personHint">Front-facing</span><img id="personPreview" alt="Person preview" hidden></label>
+            <label class="dropzone compact" for="garmentFile"><input id="garmentFile" type="file" accept="image/jpeg,image/png" hidden><span class="upload-icon">＋</span><strong data-i18n="garment">Garment</strong><span data-i18n="garmentHint">Product or outfit</span><img id="garmentPreview" alt="Garment preview" hidden></label>
+          </div>
+          <button class="primary" id="clothRun" type="button" disabled><span data-i18n="tryLook">Create my try-on</span><span>→</span></button>
+          <div class="status" id="clothStatus" hidden></div>
+          <div class="result" id="clothResult" hidden></div>
+        </div>
+      </section>
+    </section>
+
+    <section class="proof shell">
+      <div><span>2</span><p data-i18n="proof1">AI experiences in one retail journey</p></div>
+      <div><span>v2.1</span><p data-i18n="proof2">Latest Skin Analysis endpoint</p></div>
+      <div><span>v3</span><p data-i18n="proof3">AI Clothes virtual try-on engine</p></div>
+      <div><span>0</span><p data-i18n="proof4">API secrets exposed client-side</p></div>
+    </section>
+  </main>
+
+  <footer class="shell"><span>MirrorMENA · YouCam API Hackathon 2026</span><span data-i18n="disclaimer">Demo experience — not medical advice.</span></footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>
