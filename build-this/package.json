@@ -10,7 +10,7 @@
     "dev": "devvit playtest",
     "launch": "npm run deploy && devvit publish --public",
     "login": "devvit login",
-    "test:types": "tsc --noEmit"
+    "test:types": "tsc --build"
   },
   "engines": { "node": ">=22.20.0" },
   "dependencies": {
