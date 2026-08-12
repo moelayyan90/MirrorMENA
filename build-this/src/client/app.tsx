@@ -67,7 +67,7 @@ function App() {
   const createRequest = async () => {
     const result = await showForm({
       title: 'Create a build request',
-      description: 'Describe a real problem, not a startup pitch.',
+      description: 'Describe a real problem, not a startup pitch. Restricted or regulated categories are not accepted.',
       fields: [
         { type: 'string', name: 'title', label: 'Short request title', required: true },
         { type: 'paragraph', name: 'problem', label: 'What problem needs solving?', required: true },
@@ -99,18 +99,28 @@ function App() {
     }
   };
 
-  const addPrototype = async (item: Item) => {
+  const addProof = async (item: Item) => {
     const result = await showForm({
-      title: 'Prototype ready',
-      description: 'Add a public URL where supporters can test what you built.',
-      fields: [{ type: 'string', name: 'url', label: 'Prototype URL', required: true }],
+      title: 'Reddit-native proof ready',
+      description: 'Add a Reddit post URL or developers.reddit.com app page showing what you built.',
+      fields: [{ type: 'string', name: 'url', label: 'Reddit proof URL', required: true }],
     });
     if (result.action !== 'SUBMITTED') return;
     await act(
       `/api/requests/${item.id}/prototype`,
       { url: result.values.url },
-      'Prototype attached. Testers can open it now.'
+      'Proof attached. Testers can review it now.'
     );
+  };
+
+  const report = async (item: Item) => {
+    try {
+      const result = await api(`/api/requests/${item.id}/report`, {});
+      showToast(result.hidden ? 'Reported. This request was hidden after multiple independent reports.' : 'Report received.');
+      await load();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not report request');
+    }
   };
 
   return (
@@ -157,12 +167,12 @@ function App() {
                 <button className={item.viewerSupported ? 'done' : ''} onClick={() => act(`/api/requests/${item.id}/support`, {}, item.viewerSupported ? 'Already counted.' : 'Demand +1')}>
                   {item.viewerSupported ? '✓ I NEED THIS' : 'I NEED THIS TOO'}
                 </button>
-                <button className={item.viewerTester ? 'done' : ''} onClick={() => act(`/api/requests/${item.id}/tester`, {}, 'You are in the beta pool.')}>
-                  {item.viewerTester ? '✓ BETA TESTER' : 'I CAN TEST'}
+                <button className={item.viewerTester ? 'done' : ''} onClick={() => act(`/api/requests/${item.id}/tester`, {}, 'You are in the tester pool.')}>
+                  {item.viewerTester ? '✓ TESTER' : 'I CAN TEST'}
                 </button>
                 {item.status !== 'SHIPPED' && !item.viewerBuilder ? <button onClick={() => act(`/api/requests/${item.id}/claim`, {}, 'Build claimed.')}>I’M BUILDING</button> : null}
-                {item.viewerBuilder && !item.prototypeUrl ? <button onClick={() => addPrototype(item)}>ADD PROTOTYPE</button> : null}
-                {item.prototypeUrl ? <button className="prototype" onClick={() => navigateTo(item.prototypeUrl!)}>TEST PROTOTYPE ↗</button> : null}
+                {item.viewerBuilder && !item.prototypeUrl ? <button onClick={() => addProof(item)}>ADD REDDIT PROOF</button> : null}
+                {item.prototypeUrl ? <button className="prototype" onClick={() => navigateTo(item.prototypeUrl!)}>OPEN REDDIT PROOF ↗</button> : null}
                 {item.prototypeUrl ? (
                   <>
                     <button onClick={() => act(`/api/requests/${item.id}/vote`, { vote: 'works' }, 'Test recorded: works.')}>✓ WORKS {item.works}</button>
@@ -171,13 +181,14 @@ function App() {
                 ) : null}
                 {item.viewerBuilder && item.prototypeUrl && item.status !== 'SHIPPED' ? <button className="ship" onClick={() => act(`/api/requests/${item.id}/ship`, {}, 'Marked SHIPPED.')}>MARK SHIPPED</button> : null}
                 {item.sourceUrl ? <button className="ghost" onClick={() => navigateTo(item.sourceUrl!)}>SOURCE POST ↗</button> : null}
+                <button className="ghost" onClick={() => report(item)}>REPORT</button>
               </div>
             </article>
           ))}
         </section>
       )}
 
-      <p className="foot">BUILD THIS stores only the minimum identity needed to prevent duplicate actions and show claimed builders. Demand starts from real Reddit posts or user-submitted problems.</p>
+      <p className="foot">BUILD THIS keeps v1 Reddit-native: proof links must remain on Reddit. It blocks regulated/restricted categories, accepts user reports, and stores only the minimum identity needed to prevent duplicate actions and show claimed builders.</p>
     </main>
   );
 }
