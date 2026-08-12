@@ -1,13 +1,24 @@
 $ErrorActionPreference = 'Stop'
 
 $project = Join-Path $HOME 'Desktop\build-this'
-if (-not (Test-Path $project)) {
-  throw 'BUILD THIS project was not found on Desktop. Run build-this-launch.ps1 first.'
-}
+$zip = Join-Path $env:TEMP 'build-this-review-fix.zip'
+$extract = Join-Path $env:TEMP 'build-this-review-fix-src'
+$archiveRoot = Join-Path $extract 'MirrorMENA-build-this-final\build-this'
 
+Write-Host 'Refreshing the latest BUILD THIS review-fix source...' -ForegroundColor Cyan
+if (Test-Path $zip) { Remove-Item $zip -Force }
+if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+
+Invoke-WebRequest -UseBasicParsing 'https://github.com/moelayyan90/MirrorMENA/archive/refs/heads/build-this-final.zip' -OutFile $zip
+Expand-Archive -Path $zip -DestinationPath $extract -Force
+
+if (Test-Path $project) { Remove-Item $project -Recurse -Force }
+Copy-Item -Path $archiveRoot -Destination $project -Recurse -Force
 Set-Location $project
 
-Write-Host 'Verifying BUILD THIS before public review...' -ForegroundColor Cyan
+Write-Host 'Installing and verifying BUILD THIS...' -ForegroundColor Cyan
+npm install
+if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
 npm run test:types
 if ($LASTEXITCODE -ne 0) { throw 'Type checking failed' }
 npm run build
@@ -19,9 +30,9 @@ if ($LASTEXITCODE -ne 0) {
   if ($LASTEXITCODE -ne 0) { throw 'Devvit login failed' }
 }
 
-Write-Host 'Submitting BUILD THIS for public App Directory review...' -ForegroundColor Yellow
+Write-Host 'Submitting the UGC-compliance fix for public App Directory review...' -ForegroundColor Yellow
 Write-Host 'If Reddit asks to attach the source bundle for review, choose Continue.' -ForegroundColor Yellow
 npx devvit publish --public
 if ($LASTEXITCODE -ne 0) { throw 'Reddit publish did not complete successfully' }
 
-Write-Host 'BUILD THIS has been submitted for public review.' -ForegroundColor Green
+Write-Host 'BUILD THIS review fix has been submitted.' -ForegroundColor Green
