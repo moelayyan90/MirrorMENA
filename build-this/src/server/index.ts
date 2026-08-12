@@ -91,13 +91,15 @@ async function createOrMatch(input: { title: string; problem: string; outcome: s
   const title = clean(input.title, 120);
   const problem = clean(input.problem, 700);
   const outcome = clean(input.outcome, 500);
+  const sourceUrl = clean(input.sourceUrl, 500);
   if (!title || !problem || !outcome) throw new Error('Title, problem, and successful outcome are required.');
+  if (!sourceUrl || !isRedditUrl(sourceUrl)) throw new Error('Build requests must originate from a Reddit post.');
   ensureAllowed(title, problem, outcome);
 
   const ids = await readIndex();
   for (const id of ids.slice(-80).reverse()) {
     const record = await getReq(id);
-    if (record && !record.hidden && record.status !== 'SHIPPED' && similarity(record.title, title) >= 0.72) {
+    if (record && !record.hidden && record.sourceUrl && isRedditUrl(record.sourceUrl) && record.status !== 'SHIPPED' && similarity(record.title, title) >= 0.72) {
       await support(record.id);
       return { record, matched: true };
     }
@@ -108,7 +110,7 @@ async function createOrMatch(input: { title: string; problem: string; outcome: s
     title,
     problem,
     outcome,
-    sourceUrl: input.sourceUrl,
+    sourceUrl,
     createdAt: new Date().toISOString(),
     createdBy: v.name,
     status: 'OPEN',
@@ -148,7 +150,7 @@ app.get('/api/feed', async (c) => {
     await Promise.all(
       ids.map(async (id) => {
         const record = await getReq(id);
-        if (!record || record.hidden) return null;
+        if (!record || record.hidden || !record.sourceUrl || !isRedditUrl(record.sourceUrl)) return null;
         const [supporters, testers, works, needsWork, viewerSupported, viewerTester] = await Promise.all([
           count(`count:support:${id}`),
           count(`count:tester:${id}`),
@@ -186,18 +188,7 @@ app.get('/api/feed', async (c) => {
 });
 
 app.post('/api/requests', async (c) => {
-  try {
-    const body = await c.req.json<any>();
-    return c.json(
-      await createOrMatch({
-        title: clean(body.title, 120),
-        problem: clean(body.problem, 700),
-        outcome: clean(body.outcome, 500),
-      })
-    );
-  } catch (error) {
-    return c.json({ message: error instanceof Error ? error.message : 'Could not create request' }, 400);
-  }
+  return c.json({ message: 'Create a normal Reddit post first, then use its ••• menu → BUILD THIS.' }, 410);
 });
 
 app.post('/api/requests/:id/support', async (c) => {
@@ -327,21 +318,22 @@ app.post('/internal/menu/build-this', async (c) => {
     if (!context.postId) return c.json({ showToast: 'Open the menu from a Reddit post.' });
     const post = await reddit.getPostById(context.postId);
     if (post.nsfw) return c.json({ showToast: 'NSFW posts cannot become BUILD THIS requests.' });
+    const sourceUrl = post.permalink.startsWith('http') ? post.permalink : `https://www.reddit.com${post.permalink}`;
     const output = await createOrMatch({
       title: post.title,
       problem: `People in r/${context.subredditName || 'this community'} surfaced this need: ${post.title}`,
       outcome: 'A usable solution that directly resolves the need described in the source post.',
-      sourceUrl: post.permalink.startsWith('http') ? post.permalink : `https://www.reddit.com${post.permalink}`,
+      sourceUrl,
     });
     const hub = await hubPost();
     return c.json(
       hub
         ? {
-            showToast: output.matched ? 'Matched existing demand. Your vote was added.' : 'Build request created.',
+            showToast: output.matched ? 'Matched existing demand. Your vote was added.' : 'Build request created from this reportable Reddit post.',
             navigateTo: hub,
           }
         : {
-            showToast: output.matched ? 'Matched existing demand.' : 'Build request created. Open the BUILD THIS hub.',
+            showToast: output.matched ? 'Matched existing demand.' : 'Build request created from this Reddit post. Open the BUILD THIS hub.',
           }
     );
   } catch (error) {
