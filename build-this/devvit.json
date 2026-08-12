@@ -10,7 +10,7 @@
   },
   "server": { "dir": "dist/server", "entry": "index.cjs" },
   "permissions": {
-    "reddit": { "enable": true, "scope": "moderator" },
+    "reddit": { "enable": true, "scope": "user" },
     "redis": true
   },
   "menu": {
