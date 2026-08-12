@@ -4,36 +4,370 @@ import { serve } from '@hono/node-server';
 import { context, createServer, getServerPort, redis, reddit } from '@devvit/web/server';
 import type { OnAppInstallRequest, TriggerResponse } from '@devvit/web/shared';
 
-type Status='OPEN'|'CLAIMED'|'TESTING'|'SHIPPED';
-type RequestRecord={id:string;title:string;problem:string;outcome:string;sourceUrl?:string;createdAt:string;createdBy:string;status:Status;builders:string[];builderKeys:string[];prototypeUrl?:string};
-const app=new Hono();
-const INDEX='requests:index'; const HUB='hub:post';
-const h=(v:string)=>createHash('sha256').update(v).digest('hex').slice(0,24);
-const viewer=()=>{if(!context.userId)throw new Error('Log in to Reddit to use this action.');return {key:h(context.userId),name:context.username||'redditor'}};
-const clean=(x:unknown,max=500)=>String(x??'').trim().slice(0,max);
-const readIndex=async()=>{try{return JSON.parse((await redis.get(INDEX))||'[]') as string[]}catch{return []}};
-const writeIndex=(ids:string[])=>redis.set(INDEX,JSON.stringify(ids.slice(-500)));
-const getReq=async(id:string)=>{const x=await redis.get(`req:${id}`);return x?JSON.parse(x) as RequestRecord:null};
-const putReq=(r:RequestRecord)=>redis.set(`req:${r.id}`,JSON.stringify(r));
-const count=async(k:string)=>Number.parseInt((await redis.get(k))||'0',10)||0;
-const tokens=(s:string)=>new Set(s.toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(x=>x.length>2&&!['the','and','for','with','this','that','need','want','tool','app'].includes(x)));
-const similarity=(a:string,b:string)=>{const A=tokens(a),B=tokens(b);if(!A.size||!B.size)return 0;let n=0;for(const x of A)if(B.has(x))n++;return n/(A.size+B.size-n)};
-async function support(id:string){const v=viewer();const k=`support:${id}:${v.key}`;if(await redis.get(k))return false;await redis.set(k,'1');await redis.incrBy(`count:support:${id}`,1);return true}
-async function createOrMatch(input:{title:string;problem:string;outcome:string;sourceUrl?:string}){const v=viewer();const ids=await readIndex();for(const id of ids.slice(-80).reverse()){const r=await getReq(id);if(r&&r.status!=='SHIPPED'&&similarity(r.title,input.title)>=.72){await support(r.id);return {record:r,matched:true}}}const r:RequestRecord={id:randomUUID().slice(0,12),title:clean(input.title,120),problem:clean(input.problem,700),outcome:clean(input.outcome,500),sourceUrl:input.sourceUrl,createdAt:new Date().toISOString(),createdBy:v.name,status:'OPEN',builders:[],builderKeys:[]};if(!r.title||!r.problem||!r.outcome)throw new Error('Title, problem, and successful outcome are required.');await putReq(r);ids.push(r.id);await writeIndex(ids);await support(r.id);return {record:r,matched:false}}
-async function createHub(){if(!context.subredditName)throw new Error('Missing subreddit context');const p=await reddit.submitCustomPost({subredditName:context.subredditName,title:'BUILD THIS — what should the internet build next?',entry:'default',textFallback:{text:'Turn real Reddit problems into ranked demand, then connect them with developers who can build and testers who asked for the solution.'}});await redis.set(HUB,p.id);return p}
-async function hubPost(){const id=await redis.get(HUB);return id?reddit.getPostById(id as `t3_${string}`):null}
+type Status = 'OPEN' | 'CLAIMED' | 'TESTING' | 'SHIPPED';
+type RequestRecord = {
+  id: string;
+  title: string;
+  problem: string;
+  outcome: string;
+  sourceUrl?: string;
+  createdAt: string;
+  createdBy: string;
+  status: Status;
+  builders: string[];
+  builderKeys: string[];
+  prototypeUrl?: string;
+  hidden?: boolean;
+};
 
-app.get('/api/feed',async c=>{const ids=(await readIndex()).slice(-120);const v=context.userId?{key:h(context.userId)}:null;const items=(await Promise.all(ids.map(async id=>{const r=await getReq(id);if(!r)return null;const [supporters,testers,works,needsWork,viewerSupported,viewerTester]=await Promise.all([count(`count:support:${id}`),count(`count:tester:${id}`),count(`count:works:${id}`),count(`count:needs:${id}`),v?redis.get(`support:${id}:${v.key}`):null,v?redis.get(`tester:${id}:${v.key}`):null]);return {...r,supporters,testers,works,needsWork,viewerSupported:Boolean(viewerSupported),viewerTester:Boolean(viewerTester),viewerBuilder:Boolean(v&&r.builderKeys.includes(v.key))}}))).filter(Boolean) as any[];items.sort((a,b)=>{if(a.status==='SHIPPED'&&b.status!=='SHIPPED')return 1;if(b.status==='SHIPPED'&&a.status!=='SHIPPED')return -1;return b.supporters-a.supporters||Date.parse(b.createdAt)-Date.parse(a.createdAt)});return c.json({subredditName:context.subredditName||'community',open:items.filter(x=>x.status!=='SHIPPED').length,shipped:items.filter(x=>x.status==='SHIPPED').length,items})});
-app.post('/api/requests',async c=>{try{const body=await c.req.json<any>();return c.json(await createOrMatch({title:clean(body.title,120),problem:clean(body.problem,700),outcome:clean(body.outcome,500)}))}catch(e){return c.json({message:e instanceof Error?e.message:'Could not create request'},400)}});
-app.post('/api/requests/:id/support',async c=>{try{const r=await getReq(c.req.param('id'));if(!r)return c.json({message:'Request not found'},404);return c.json({added:await support(r.id)})}catch(e){return c.json({message:e instanceof Error?e.message:'Could not support'},400)}});
-app.post('/api/requests/:id/tester',async c=>{try{const v=viewer(),id=c.req.param('id');if(!await getReq(id))return c.json({message:'Request not found'},404);const k=`tester:${id}:${v.key}`;if(!await redis.get(k)){await redis.set(k,'1');await redis.incrBy(`count:tester:${id}`,1)}return c.json({ok:true})}catch(e){return c.json({message:e instanceof Error?e.message:'Could not join beta'},400)}});
-app.post('/api/requests/:id/claim',async c=>{try{const v=viewer(),id=c.req.param('id'),r=await getReq(id);if(!r)return c.json({message:'Request not found'},404);if(r.status==='SHIPPED')return c.json({message:'This request is already shipped.'},409);if(!r.builderKeys.includes(v.key)){if(r.builders.length>=3)return c.json({message:'This build already has three active builders.'},409);r.builders.push(v.name);r.builderKeys.push(v.key);if(r.status==='OPEN')r.status='CLAIMED';await putReq(r)}return c.json({ok:true})}catch(e){return c.json({message:e instanceof Error?e.message:'Could not claim'},400)}});
-app.post('/api/requests/:id/prototype',async c=>{try{const v=viewer(),id=c.req.param('id'),r=await getReq(id);if(!r)return c.json({message:'Request not found'},404);if(!r.builderKeys.includes(v.key))return c.json({message:'Only a claimed builder can attach a prototype.'},403);const body=await c.req.json<any>();const url=clean(body.url,500);if(!/^https:\/\//i.test(url))return c.json({message:'Use a public https:// prototype URL.'},400);r.prototypeUrl=url;r.status='TESTING';await putReq(r);return c.json({ok:true})}catch(e){return c.json({message:e instanceof Error?e.message:'Could not add prototype'},400)}});
-app.post('/api/requests/:id/vote',async c=>{try{const v=viewer(),id=c.req.param('id'),r=await getReq(id);if(!r?.prototypeUrl)return c.json({message:'No prototype is ready to test.'},409);const body=await c.req.json<any>();const vote=body.vote==='works'?'works':body.vote==='needs-work'?'needs':null;if(!vote)return c.json({message:'Invalid test result.'},400);const k=`vote:${id}:${v.key}`;if(await redis.get(k))return c.json({ok:true,duplicate:true});await redis.set(k,vote);await redis.incrBy(vote==='works'?`count:works:${id}`:`count:needs:${id}`,1);return c.json({ok:true})}catch(e){return c.json({message:e instanceof Error?e.message:'Could not record test'},400)}});
-app.post('/api/requests/:id/ship',async c=>{try{const v=viewer(),id=c.req.param('id'),r=await getReq(id);if(!r)return c.json({message:'Request not found'},404);if(!r.builderKeys.includes(v.key))return c.json({message:'Only a claimed builder can mark this shipped.'},403);if(!r.prototypeUrl)return c.json({message:'Attach a working prototype first.'},409);r.status='SHIPPED';await putReq(r);return c.json({ok:true})}catch(e){return c.json({message:e instanceof Error?e.message:'Could not ship'},400)}});
+const app = new Hono();
+const INDEX = 'requests:index';
+const HUB = 'hub:post';
+const REPORT_HIDE_THRESHOLD = 5;
+const RESTRICTED = /\b(gambling|betting|casino|sportsbook|crypto|bitcoin|ethereum|nft|token sale|stock trading|day trading|brokerage|investment advice|medical diagnosis|diagnose|prescription|medication advice|treatment plan|political campaign|election campaign|alcohol|vape|vaping|nicotine|cannabis|marijuana|recreational drug)\b/i;
 
-app.post('/internal/menu/build-this',async c=>{try{await c.req.json().catch(()=>({}));if(!context.postId)return c.json({showToast:'Open the menu from a Reddit post.'});const p=await reddit.getPostById(context.postId);const out=await createOrMatch({title:p.title,problem:`People in r/${context.subredditName||'this community'} surfaced this need: ${p.title}`,outcome:'A usable solution that directly resolves the need described in the source post.',sourceUrl:p.permalink.startsWith('http')?p.permalink:`https://www.reddit.com${p.permalink}`});const hub=await hubPost();return c.json(hub?{showToast:out.matched?'Matched existing demand. Your vote was added.':'Build request created.',navigateTo:hub}:{showToast:out.matched?'Matched existing demand.':'Build request created. Open the BUILD THIS hub.'})}catch(e){return c.json({showToast:e instanceof Error?e.message:'Could not create build request.'})}});
-app.post('/internal/menu/create-hub',async c=>{try{await c.req.json().catch(()=>({}));const p=await createHub();return c.json({showToast:'BUILD THIS hub created.',navigateTo:p})}catch(e){return c.json({showToast:e instanceof Error?e.message:'Could not create hub.'})}});
-app.post('/internal/triggers/app-install',async c=>{try{await c.req.json<OnAppInstallRequest>();await createHub();return c.json<TriggerResponse>({status:'success',message:'BUILD THIS hub created'})}catch(e){console.error(e);return c.json<TriggerResponse>({status:'error',message:'Hub creation failed'},400)}});
+const h = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 24);
+const viewer = () => {
+  if (!context.userId) throw new Error('Log in to Reddit to use this action.');
+  return { key: h(context.userId), name: context.username || 'redditor' };
+};
+const clean = (value: unknown, max = 500) => String(value ?? '').trim().slice(0, max);
+const readIndex = async () => {
+  try {
+    return JSON.parse((await redis.get(INDEX)) || '[]') as string[];
+  } catch {
+    return [];
+  }
+};
+const writeIndex = (ids: string[]) => redis.set(INDEX, JSON.stringify(ids.slice(-500)));
+const getReq = async (id: string) => {
+  const value = await redis.get(`req:${id}`);
+  return value ? (JSON.parse(value) as RequestRecord) : null;
+};
+const putReq = (record: RequestRecord) => redis.set(`req:${record.id}`, JSON.stringify(record));
+const count = async (key: string) => Number.parseInt((await redis.get(key)) || '0', 10) || 0;
+const tokens = (value: string) => new Set(
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !['the', 'and', 'for', 'with', 'this', 'that', 'need', 'want', 'tool', 'app'].includes(token))
+);
+const similarity = (a: string, b: string) => {
+  const first = tokens(a);
+  const second = tokens(b);
+  if (!first.size || !second.size) return 0;
+  let overlap = 0;
+  for (const token of first) if (second.has(token)) overlap++;
+  return overlap / (first.size + second.size - overlap);
+};
+const ensureAllowed = (...parts: string[]) => {
+  if (RESTRICTED.test(parts.join(' '))) {
+    throw new Error('BUILD THIS does not accept requests in regulated or restricted categories.');
+  }
+};
+const isRedditUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && (url.hostname === 'reddit.com' || url.hostname.endsWith('.reddit.com'));
+  } catch {
+    return false;
+  }
+};
 
-serve({fetch:app.fetch,createServer,port:getServerPort()});
+async function support(id: string) {
+  const v = viewer();
+  const record = await getReq(id);
+  if (!record || record.hidden) throw new Error('Request is no longer available.');
+  const key = `support:${id}:${v.key}`;
+  if (await redis.get(key)) return false;
+  await redis.set(key, '1');
+  await redis.incrBy(`count:support:${id}`, 1);
+  return true;
+}
+
+async function createOrMatch(input: { title: string; problem: string; outcome: string; sourceUrl?: string }) {
+  const v = viewer();
+  const title = clean(input.title, 120);
+  const problem = clean(input.problem, 700);
+  const outcome = clean(input.outcome, 500);
+  if (!title || !problem || !outcome) throw new Error('Title, problem, and successful outcome are required.');
+  ensureAllowed(title, problem, outcome);
+
+  const ids = await readIndex();
+  for (const id of ids.slice(-80).reverse()) {
+    const record = await getReq(id);
+    if (record && !record.hidden && record.status !== 'SHIPPED' && similarity(record.title, title) >= 0.72) {
+      await support(record.id);
+      return { record, matched: true };
+    }
+  }
+
+  const record: RequestRecord = {
+    id: randomUUID().slice(0, 12),
+    title,
+    problem,
+    outcome,
+    sourceUrl: input.sourceUrl,
+    createdAt: new Date().toISOString(),
+    createdBy: v.name,
+    status: 'OPEN',
+    builders: [],
+    builderKeys: [],
+  };
+  await putReq(record);
+  ids.push(record.id);
+  await writeIndex(ids);
+  await support(record.id);
+  return { record, matched: false };
+}
+
+async function createHub() {
+  if (!context.subredditName) throw new Error('Missing subreddit context');
+  const post = await reddit.submitCustomPost({
+    subredditName: context.subredditName,
+    title: 'BUILD THIS — what should the internet build next?',
+    entry: 'default',
+    textFallback: {
+      text: 'Turn real Reddit problems into ranked demand, then connect them with developers who can build and testers who asked for the solution.',
+    },
+  });
+  await redis.set(HUB, post.id);
+  return post;
+}
+
+async function hubPost() {
+  const id = await redis.get(HUB);
+  return id ? reddit.getPostById(id as `t3_${string}`) : null;
+}
+
+app.get('/api/feed', async (c) => {
+  const ids = (await readIndex()).slice(-120);
+  const currentViewer = context.userId ? { key: h(context.userId) } : null;
+  const items = (
+    await Promise.all(
+      ids.map(async (id) => {
+        const record = await getReq(id);
+        if (!record || record.hidden) return null;
+        const [supporters, testers, works, needsWork, viewerSupported, viewerTester] = await Promise.all([
+          count(`count:support:${id}`),
+          count(`count:tester:${id}`),
+          count(`count:works:${id}`),
+          count(`count:needs:${id}`),
+          currentViewer ? redis.get(`support:${id}:${currentViewer.key}`) : null,
+          currentViewer ? redis.get(`tester:${id}:${currentViewer.key}`) : null,
+        ]);
+        return {
+          ...record,
+          supporters,
+          testers,
+          works,
+          needsWork,
+          viewerSupported: Boolean(viewerSupported),
+          viewerTester: Boolean(viewerTester),
+          viewerBuilder: Boolean(currentViewer && record.builderKeys.includes(currentViewer.key)),
+        };
+      })
+    )
+  ).filter(Boolean) as any[];
+
+  items.sort((a, b) => {
+    if (a.status === 'SHIPPED' && b.status !== 'SHIPPED') return 1;
+    if (b.status === 'SHIPPED' && a.status !== 'SHIPPED') return -1;
+    return b.supporters - a.supporters || Date.parse(b.createdAt) - Date.parse(a.createdAt);
+  });
+
+  return c.json({
+    subredditName: context.subredditName || 'community',
+    open: items.filter((item) => item.status !== 'SHIPPED').length,
+    shipped: items.filter((item) => item.status === 'SHIPPED').length,
+    items,
+  });
+});
+
+app.post('/api/requests', async (c) => {
+  try {
+    const body = await c.req.json<any>();
+    return c.json(
+      await createOrMatch({
+        title: clean(body.title, 120),
+        problem: clean(body.problem, 700),
+        outcome: clean(body.outcome, 500),
+      })
+    );
+  } catch (error) {
+    return c.json({ message: error instanceof Error ? error.message : 'Could not create request' }, 400);
+  }
+});
+
+app.post('/api/requests/:id/support', async (c) => {
+  try {
+    return c.json({ added: await support(c.req.param('id')) });
+  } catch (error) {
+    return c.json({ message: error instanceof Error ? error.message : 'Could not support' }, 400);
+  }
+});
+
+app.post('/api/requests/:id/tester', async (c) => {
+  try {
+    const v = viewer();
+    const id = c.req.param('id');
+    const record = await getReq(id);
+    if (!record || record.hidden) return c.json({ message: 'Request not found' }, 404);
+    const key = `tester:${id}:${v.key}`;
+    if (!(await redis.get(key))) {
+      await redis.set(key, '1');
+      await redis.incrBy(`count:tester:${id}`, 1);
+    }
+    return c.json({ ok: true });
+  } catch (error) {
+    return c.json({ message: error instanceof Error ? error.message : 'Could not join beta' }, 400);
+  }
+});
+
+app.post('/api/requests/:id/claim', async (c) => {
+  try {
+    const v = viewer();
+    const id = c.req.param('id');
+    const record = await getReq(id);
+    if (!record || record.hidden) return c.json({ message: 'Request not found' }, 404);
+    if (record.status === 'SHIPPED') return c.json({ message: 'This request is already shipped.' }, 409);
+    if (!record.builderKeys.includes(v.key)) {
+      if (record.builders.length >= 3) return c.json({ message: 'This build already has three active builders.' }, 409);
+      record.builders.push(v.name);
+      record.builderKeys.push(v.key);
+      if (record.status === 'OPEN') record.status = 'CLAIMED';
+      await putReq(record);
+    }
+    return c.json({ ok: true });
+  } catch (error) {
+    return c.json({ message: error instanceof Error ? error.message : 'Could not claim' }, 400);
+  }
+});
+
+app.post('/api/requests/:id/prototype', async (c) => {
+  try {
+    const v = viewer();
+    const id = c.req.param('id');
+    const record = await getReq(id);
+    if (!record || record.hidden) return c.json({ message: 'Request not found' }, 404);
+    if (!record.builderKeys.includes(v.key)) return c.json({ message: 'Only a claimed builder can attach proof.' }, 403);
+    const body = await c.req.json<any>();
+    const url = clean(body.url, 500);
+    if (!isRedditUrl(url)) {
+      return c.json({ message: 'Use a Reddit URL showing the proof: reddit.com or developers.reddit.com.' }, 400);
+    }
+    record.prototypeUrl = url;
+    record.status = 'TESTING';
+    await putReq(record);
+    return c.json({ ok: true });
+  } catch (error) {
+    return c.json({ message: error instanceof Error ? error.message : 'Could not add proof' }, 400);
+  }
+});
+
+app.post('/api/requests/:id/vote', async (c) => {
+  try {
+    const v = viewer();
+    const id = c.req.param('id');
+    const record = await getReq(id);
+    if (!record || record.hidden || !record.prototypeUrl) return c.json({ message: 'No proof is ready to test.' }, 409);
+    const body = await c.req.json<any>();
+    const vote = body.vote === 'works' ? 'works' : body.vote === 'needs-work' ? 'needs' : null;
+    if (!vote) return c.json({ message: 'Invalid test result.' }, 400);
+    const key = `vote:${id}:${v.key}`;
+    if (await redis.get(key)) return c.json({ ok: true, duplicate: true });
+    await redis.set(key, vote);
+    await redis.incrBy(vote === 'works' ? `count:works:${id}` : `count:needs:${id}`, 1);
+    return c.json({ ok: true });
+  } catch (error) {
+    return c.json({ message: error instanceof Error ? error.message : 'Could not record test' }, 400);
+  }
+});
+
+app.post('/api/requests/:id/ship', async (c) => {
+  try {
+    const v = viewer();
+    const id = c.req.param('id');
+    const record = await getReq(id);
+    if (!record || record.hidden) return c.json({ message: 'Request not found' }, 404);
+    if (!record.builderKeys.includes(v.key)) return c.json({ message: 'Only a claimed builder can mark this shipped.' }, 403);
+    if (!record.prototypeUrl) return c.json({ message: 'Attach Reddit-native proof first.' }, 409);
+    record.status = 'SHIPPED';
+    await putReq(record);
+    return c.json({ ok: true });
+  } catch (error) {
+    return c.json({ message: error instanceof Error ? error.message : 'Could not ship' }, 400);
+  }
+});
+
+app.post('/api/requests/:id/report', async (c) => {
+  try {
+    const v = viewer();
+    const id = c.req.param('id');
+    const record = await getReq(id);
+    if (!record || record.hidden) return c.json({ message: 'Request not found' }, 404);
+    const key = `report:${id}:${v.key}`;
+    if (await redis.get(key)) return c.json({ ok: true, duplicate: true });
+    await redis.set(key, '1');
+    const reports = await redis.incrBy(`count:report:${id}`, 1);
+    if (reports >= REPORT_HIDE_THRESHOLD) {
+      record.hidden = true;
+      await putReq(record);
+    }
+    return c.json({ ok: true, hidden: Boolean(record.hidden) });
+  } catch (error) {
+    return c.json({ message: error instanceof Error ? error.message : 'Could not report request' }, 400);
+  }
+});
+
+app.post('/internal/menu/build-this', async (c) => {
+  try {
+    await c.req.json().catch(() => ({}));
+    if (!context.postId) return c.json({ showToast: 'Open the menu from a Reddit post.' });
+    const post = await reddit.getPostById(context.postId);
+    if (post.nsfw) return c.json({ showToast: 'NSFW posts cannot become BUILD THIS requests.' });
+    const output = await createOrMatch({
+      title: post.title,
+      problem: `People in r/${context.subredditName || 'this community'} surfaced this need: ${post.title}`,
+      outcome: 'A usable solution that directly resolves the need described in the source post.',
+      sourceUrl: post.permalink.startsWith('http') ? post.permalink : `https://www.reddit.com${post.permalink}`,
+    });
+    const hub = await hubPost();
+    return c.json(
+      hub
+        ? {
+            showToast: output.matched ? 'Matched existing demand. Your vote was added.' : 'Build request created.',
+            navigateTo: hub,
+          }
+        : {
+            showToast: output.matched ? 'Matched existing demand.' : 'Build request created. Open the BUILD THIS hub.',
+          }
+    );
+  } catch (error) {
+    return c.json({ showToast: error instanceof Error ? error.message : 'Could not create build request.' });
+  }
+});
+
+app.post('/internal/menu/create-hub', async (c) => {
+  try {
+    await c.req.json().catch(() => ({}));
+    const post = await createHub();
+    return c.json({ showToast: 'BUILD THIS hub created.', navigateTo: post });
+  } catch (error) {
+    return c.json({ showToast: error instanceof Error ? error.message : 'Could not create hub.' });
+  }
+});
+
+app.post('/internal/triggers/app-install', async (c) => {
+  try {
+    await c.req.json<OnAppInstallRequest>();
+    await createHub();
+    return c.json<TriggerResponse>({ status: 'success', message: 'BUILD THIS hub created' });
+  } catch (error) {
+    console.error(error);
+    return c.json<TriggerResponse>({ status: 'error', message: 'Hub creation failed' }, 400);
+  }
+});
+
+serve({ fetch: app.fetch, createServer, port: getServerPort() });
