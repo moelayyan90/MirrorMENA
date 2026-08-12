@@ -1,0 +1,26 @@
+name: BUILD THIS CI
+
+on:
+  push:
+    branches: [build-this-final]
+    paths:
+      - 'build-this/**'
+      - '.github/workflows/build-this-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: build-this
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+          cache: npm
+          cache-dependency-path: build-this/package.json
+      - run: npm install
+      - run: npm run test:types
+      - run: npm run build
