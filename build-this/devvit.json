@@ -9,13 +9,17 @@
     }
   },
   "server": { "dir": "dist/server", "entry": "index.cjs" },
-  "permissions": { "reddit": true, "redis": true },
+  "permissions": {
+    "reddit": { "enable": true, "scope": "moderator" },
+    "redis": true
+  },
   "menu": {
     "items": [
       {
         "label": "BUILD THIS",
         "description": "Turn this post into a verified build request",
         "location": "post",
+        "forUserType": "user",
         "endpoint": "/internal/menu/build-this"
       },
       {
