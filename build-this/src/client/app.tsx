@@ -64,29 +64,14 @@ function App() {
     [data, filter]
   );
 
-  const createRequest = async () => {
-    const result = await showForm({
-      title: 'Create a build request',
-      description: 'Describe a real problem, not a startup pitch. Restricted or regulated categories are not accepted.',
-      fields: [
-        { type: 'string', name: 'title', label: 'Short request title', required: true },
-        { type: 'paragraph', name: 'problem', label: 'What problem needs solving?', required: true },
-        { type: 'paragraph', name: 'outcome', label: 'What would a successful solution do?', required: true },
-      ],
-    });
-    if (result.action !== 'SUBMITTED') return;
-
-    try {
-      const output = await api('/api/requests', {
-        title: result.values.title,
-        problem: result.values.problem,
-        outcome: result.values.outcome,
-      });
-      showToast(output.matched ? 'Matched existing demand — your vote was added.' : 'Build request created.');
-      await load();
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not create request');
+  const createRequest = () => {
+    const subreddit = data?.subredditName;
+    if (!subreddit) {
+      showToast('Open BUILD THIS inside a subreddit first.');
+      return;
     }
+    showToast('Create a normal Reddit post first. Then open its ••• menu and choose BUILD THIS.');
+    navigateTo(`https://www.reddit.com/r/${encodeURIComponent(subreddit)}/submit?selftext=true`);
   };
 
   const act = async (path: string, body?: unknown, message?: string) => {
@@ -128,8 +113,8 @@ function App() {
       <section className="hero">
         <div className="eyebrow">r/{data?.subredditName ?? 'community'} · DEMAND SIGNAL</div>
         <h1>BUILD THIS</h1>
-        <p>Real problems become ranked demand. Developers build what people already asked for.</p>
-        <button className="primary" onClick={createRequest}>+ CREATE BUILD REQUEST</button>
+        <p>Real Reddit posts become ranked demand. Developers build what people already asked for.</p>
+        <button className="primary" onClick={createRequest}>+ POST REQUEST ON REDDIT</button>
       </section>
 
       <section className="metrics">
@@ -188,7 +173,7 @@ function App() {
         </section>
       )}
 
-      <p className="foot">BUILD THIS keeps v1 Reddit-native: proof links must remain on Reddit. It blocks regulated/restricted categories, accepts user reports, and stores only the minimum identity needed to prevent duplicate actions and show claimed builders.</p>
+      <p className="foot">BUILD THIS keeps request text Reddit-native: requests originate from ordinary Reddit posts with normal author attribution and Reddit reporting. Use a post’s ••• menu → BUILD THIS to add it to the demand board. Proof links must remain on Reddit.</p>
     </main>
   );
 }
