@@ -1,3 +1,9 @@
-# BUILD THIS v1 status
+# BUILD THIS v0.0.4 status
 
-Source-complete MVP prepared for Devvit playtest. CI validates TypeScript and production Vite build before Reddit upload.
+Publicly approved by Reddit and listed in the App Directory on 2026-08-20.
+
+Current production scope:
+- Reddit-native build requests sourced from ordinary Reddit posts.
+- User reporting with automatic hiding after five unique reports.
+- Per-subreddit Devvit Redis storage.
+- TypeScript and production Vite build validated by CI before release.
