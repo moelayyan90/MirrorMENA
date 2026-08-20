@@ -25,6 +25,7 @@ const INDEX = 'requests:index';
 const HUB = 'hub:post';
 const REPORT_HIDE_THRESHOLD = 5;
 const RESTRICTED = /\b(gambling|betting|casino|sportsbook|crypto|bitcoin|ethereum|nft|token sale|stock trading|day trading|brokerage|investment advice|medical diagnosis|diagnose|prescription|medication advice|treatment plan|political campaign|election campaign|alcohol|vape|vaping|nicotine|cannabis|marijuana|recreational drug)\b/i;
+const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'this', 'that', 'need', 'want', 'tool', 'app']);
 
 const h = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 24);
 const viewer = () => {
@@ -46,13 +47,15 @@ const getReq = async (id: string) => {
 };
 const putReq = (record: RequestRecord) => redis.set(`req:${record.id}`, JSON.stringify(record));
 const count = async (key: string) => Number.parseInt((await redis.get(key)) || '0', 10) || 0;
-const tokens = (value: string) => new Set(
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((token) => token.length > 2 && !['the', 'and', 'for', 'with', 'this', 'that', 'need', 'want', 'tool', 'app'].includes(token))
-);
+const tokens = (value: string) =>
+  new Set(
+    value
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 2 && !STOPWORDS.has(token))
+  );
 const similarity = (a: string, b: string) => {
   const first = tokens(a);
   const second = tokens(b);
@@ -99,7 +102,16 @@ async function createOrMatch(input: { title: string; problem: string; outcome: s
   const ids = await readIndex();
   for (const id of ids.slice(-80).reverse()) {
     const record = await getReq(id);
-    if (record && !record.hidden && record.sourceUrl && isRedditUrl(record.sourceUrl) && record.status !== 'SHIPPED' && similarity(record.title, title) >= 0.72) {
+    const sameSource = record?.sourceUrl === sourceUrl;
+    const similarTitle = record ? similarity(record.title, title) >= 0.72 : false;
+    if (
+      record &&
+      !record.hidden &&
+      record.sourceUrl &&
+      isRedditUrl(record.sourceUrl) &&
+      record.status !== 'SHIPPED' &&
+      (sameSource || similarTitle)
+    ) {
       await support(record.id);
       return { record, matched: true };
     }
@@ -124,8 +136,21 @@ async function createOrMatch(input: { title: string; problem: string; outcome: s
   return { record, matched: false };
 }
 
+async function hubPost() {
+  const id = await redis.get(HUB);
+  if (!id) return null;
+  try {
+    return await reddit.getPostById(id as `t3_${string}`);
+  } catch {
+    return null;
+  }
+}
+
 async function createHub() {
   if (!context.subredditName) throw new Error('Missing subreddit context');
+  const existing = await hubPost();
+  if (existing) return existing;
+
   const post = await reddit.submitCustomPost({
     subredditName: context.subredditName,
     title: 'BUILD THIS — what should the internet build next?',
@@ -136,11 +161,6 @@ async function createHub() {
   });
   await redis.set(HUB, post.id);
   return post;
-}
-
-async function hubPost() {
-  const id = await redis.get(HUB);
-  return id ? reddit.getPostById(id as `t3_${string}`) : null;
 }
 
 app.get('/api/feed', async (c) => {
@@ -345,7 +365,7 @@ app.post('/internal/menu/create-hub', async (c) => {
   try {
     await c.req.json().catch(() => ({}));
     const post = await createHub();
-    return c.json({ showToast: 'BUILD THIS hub created.', navigateTo: post });
+    return c.json({ showToast: 'BUILD THIS hub ready.', navigateTo: post });
   } catch (error) {
     return c.json({ showToast: error instanceof Error ? error.message : 'Could not create hub.' });
   }
@@ -355,7 +375,7 @@ app.post('/internal/triggers/app-install', async (c) => {
   try {
     await c.req.json<OnAppInstallRequest>();
     await createHub();
-    return c.json<TriggerResponse>({ status: 'success', message: 'BUILD THIS hub created' });
+    return c.json<TriggerResponse>({ status: 'success', message: 'BUILD THIS hub ready' });
   } catch (error) {
     console.error(error);
     return c.json<TriggerResponse>({ status: 'error', message: 'Hub creation failed' }, 400);
