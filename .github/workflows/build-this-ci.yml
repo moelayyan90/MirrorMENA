@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   build-and-publish:
@@ -21,6 +22,7 @@ jobs:
     env:
       DEVVIT_TOKEN: ${{ secrets.DEVVIT_TOKEN }}
       DEVVIT_SESSION_ID: ${{ secrets.DEVVIT_SESSION_ID }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -28,14 +30,32 @@ jobs:
           node-version: '22.20.0'
           cache: npm
           cache-dependency-path: build-this/package.json
-      - run: npm install --no-audit --no-fund
-      - run: npm run test:types
-      - run: npm run build
-      - name: Restore Devvit authentication
+
+      - id: install
+        name: Install dependencies
+        continue-on-error: true
+        run: npm install --no-audit --no-fund
+
+      - id: types
+        name: Typecheck
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run test:types
+
+      - id: build
+        name: Build
+        if: steps.types.outcome == 'success'
+        continue-on-error: true
+        run: npm run build
+
+      - id: auth
+        name: Restore Devvit authentication
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           if [ -z "$DEVVIT_TOKEN" ]; then
-            echo "::error::DEVVIT_TOKEN repository secret is missing"
+            echo "DEVVIT_TOKEN repository secret is missing"
             exit 1
           fi
           mkdir -p "$HOME/.devvit"
@@ -44,5 +64,40 @@ jobs:
             printf '%s' "$DEVVIT_SESSION_ID" > "$HOME/.devvit/session-id"
           fi
           npx devvit whoami
-      - name: Publish BUILD THIS public update
+
+      - id: publish
+        name: Publish BUILD THIS public update
+        if: steps.auth.outcome == 'success'
+        continue-on-error: true
         run: npx devvit publish --public --bump patch --verbose
+
+      - name: Report deployment result
+        if: always()
+        shell: bash
+        working-directory: .
+        run: |
+          BODY=$(cat <<EOF
+          Commit: $GITHUB_SHA
+          Install: ${{ steps.install.outcome }}
+          Typecheck: ${{ steps.types.outcome }}
+          Build: ${{ steps.build.outcome }}
+          Devvit auth: ${{ steps.auth.outcome }}
+          Public publish: ${{ steps.publish.outcome }}
+          EOF
+          )
+          ISSUE=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'BUILD THIS deployment status in:title' --json number,title --jq '.[] | select(.title == "BUILD THIS deployment status") | .number' | head -n 1)
+          if [ -n "$ISSUE" ]; then
+            gh issue edit "$ISSUE" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title 'BUILD THIS deployment status' --body "$BODY"
+          fi
+
+      - name: Fail if publish did not complete
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.install.outcome }}" = "success" \
+            -a "${{ steps.types.outcome }}" = "success" \
+            -a "${{ steps.build.outcome }}" = "success" \
+            -a "${{ steps.auth.outcome }}" = "success" \
+            -a "${{ steps.publish.outcome }}" = "success"
