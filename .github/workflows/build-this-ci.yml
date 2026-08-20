@@ -12,12 +12,15 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: build-this
+    env:
+      DEVVIT_TOKEN: ${{ secrets.DEVVIT_TOKEN }}
+      DEVVIT_SESSION_ID: ${{ secrets.DEVVIT_SESSION_ID }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -28,3 +31,18 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run test:types
       - run: npm run build
+      - name: Restore Devvit authentication
+        shell: bash
+        run: |
+          if [ -z "$DEVVIT_TOKEN" ]; then
+            echo "::error::DEVVIT_TOKEN repository secret is missing"
+            exit 1
+          fi
+          mkdir -p "$HOME/.devvit"
+          printf '%s' "$DEVVIT_TOKEN" > "$HOME/.devvit/token"
+          if [ -n "$DEVVIT_SESSION_ID" ]; then
+            printf '%s' "$DEVVIT_SESSION_ID" > "$HOME/.devvit/session-id"
+          fi
+          npx devvit whoami
+      - name: Publish BUILD THIS public update
+        run: npx devvit publish --public --bump patch --verbose
