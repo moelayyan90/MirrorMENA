@@ -1,12 +1,12 @@
 {
   "private": true,
   "name": "build-this",
-  "version": "0.0.0",
+  "version": "0.0.4",
   "license": "BSD-3-Clause",
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "deploy": "npm run test:types && devvit upload",
+    "deploy": "npm run test:types && npm run build && devvit upload",
     "dev": "devvit playtest",
     "launch": "npm run deploy && devvit publish --public",
     "login": "devvit login",
