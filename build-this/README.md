@@ -1,11 +1,11 @@
 # BUILD THIS
 
-BUILD THIS turns real Reddit problems into ranked, testable product demand while keeping the launch version Reddit-native.
+BUILD THIS turns real Reddit problems into ranked, testable product demand while keeping the experience Reddit-native.
 
 ## Core loop
 
 1. Any Redditor can use the **BUILD THIS** post menu action to turn a real, non-NSFW post into a build request.
-2. Similar requests are clustered automatically using lightweight title similarity, so repeated pain becomes one stronger demand signal instead of duplicate noise.
+2. Repeated requests are clustered automatically, including titles written in non-Latin scripts, so repeated pain becomes one stronger demand signal instead of duplicate noise.
 3. Community members press **I NEED THIS TOO** to add one demand signal and **I CAN TEST** to join the tester pool.
 4. Developers press **I'M BUILDING** to claim a request. Up to three builders may work on the same need.
 5. Builders attach Reddit-native proof: a Reddit post URL or a `developers.reddit.com` app page showing the solution. The request moves to **TESTING**.
@@ -34,12 +34,13 @@ Reddit already contains high-signal product demand, but it is fragmented across 
 
 ## Current scope
 
-This launch version ranks demand within each installed subreddit. Cross-community global aggregation is intentionally not enabled in v1 because Devvit Redis is installation-scoped. A future cross-community layer should use a Reddit-approved shared backend or an officially supported cross-installation capability.
+This version ranks demand within each installed subreddit. Cross-community global aggregation is intentionally not enabled because Devvit Redis is installation-scoped. A future cross-community layer should use a Reddit-approved shared backend or an officially supported cross-installation capability.
 
 ## Moderator usage
 
-Installing the app creates a **BUILD THIS** hub post automatically. Moderators can create another hub from the subreddit menu if needed.
+Installing the app creates a **BUILD THIS** hub automatically. Install-trigger retries reuse the existing hub instead of creating duplicates. If the stored hub no longer exists, the subreddit menu action recreates it.
 
-## Testing target
+## Release
 
+Public App Directory approval: `build-this@0.0.4`.
 Default playtest subreddit: `r/answer_debt_dev`.
